@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
     <string name="app_name">Merauke</string>
     <string name="action_settings">Settings</string>
     <string name="hello_world">Hello world!</string>
-
+	<string name="APP_ID">481491828555248</string>
+	<string name="login">Login</string>
+    <string name="instructions">Login to create a link to fetch account data</string>
+    <string name="logout">Log out</string>
 </resources>

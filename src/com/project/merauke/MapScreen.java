@@ -5,7 +5,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -18,8 +21,13 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import android.app.Dialog;
 import android.content.Context;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Point;
+import android.graphics.drawable.ColorDrawable;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -28,9 +36,15 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
 import android.view.Display;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup.LayoutParams;
 import android.view.ViewTreeObserver.OnGlobalLayoutListener;
 import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import com.actionbarsherlock.app.SherlockActivity;
@@ -39,6 +53,16 @@ import com.actionbarsherlock.view.Menu;
 import com.actionbarsherlock.view.MenuItem;
 import com.actionbarsherlock.view.SubMenu;
 import com.actionbarsherlock.view.Window;
+import com.facebook.FacebookRequestError;
+import com.facebook.HttpMethod;
+import com.facebook.LoggingBehavior;
+import com.facebook.Request;
+import com.facebook.RequestAsyncTask;
+import com.facebook.Response;
+import com.facebook.Session;
+import com.facebook.Session.OpenRequest;
+import com.facebook.SessionState;
+import com.facebook.Settings;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.GoogleMap.OnCameraChangeListener;
@@ -52,7 +76,7 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
-public class MapScreen extends SherlockActivity{
+public class MapScreen extends SherlockActivity {
 
 	GoogleMap map;
 	LatLng pointMin;
@@ -85,6 +109,9 @@ public class MapScreen extends SherlockActivity{
 	// String coordinates for Jl.Dipatiukur near ITHB initial to zoom
 	static String strOrigin[] = {"-6.888435", "107.615631"};
 	static String HTTP_URL = "http://www.jejaringhotel.com/android/showme.php";
+	private static final List<String> PERMISSIONS = Arrays.asList("publish_actions");
+	private static final String PENDING_PUBLISH_KEY = "pendingPublishReauthorization";
+	private boolean pendingPublishReauthorization = false;
 	LatLng userCoordinate;// = new LatLng(-6.888435, 107.615631);
 	
 	@Override
@@ -94,7 +121,7 @@ public class MapScreen extends SherlockActivity{
 		
 		requestWindowFeature(Window.FEATURE_PROGRESS);
 		
-		setContentView(R.layout.activity_blank);
+		setContentView(R.layout.map_activity);
 				
 		// tabScreen = (MapTabsScreen) this.getParent();
 		// TODO next time check if there is any location provider
@@ -128,7 +155,15 @@ public class MapScreen extends SherlockActivity{
 			public void onInfoWindowClick(Marker marker) {
 				if(!marker.equals(bandung)) {
 					MarkerInfo eventInfo = hashMapInfo.get(marker);
-					Toast.makeText(getBaseContext(), "name: "+eventInfo.infoTitle, Toast.LENGTH_SHORT).show();
+					//startActivity(new Intent(MapScreen.this, InfoActivity.class));
+				
+					HotelInfoActivity hotel = new HotelInfoActivity(MapScreen.this, eventInfo.infoTitle);
+					hotel.setTitle(eventInfo.infoTitle);
+					hotel.show();
+					
+					//Fragment.instantiate(getBaseContext(), HotelInfoActivity.class.getName(), null);
+					//MapScreen.this.startActivity(new Intent(MapScreen.this, HotelInfoActivity.class));
+					// Toast.makeText(getBaseContext(), "name: "+eventInfo.infoTitle, Toast.LENGTH_SHORT).show();
 				}
 			}
 		});
@@ -211,6 +246,12 @@ public class MapScreen extends SherlockActivity{
 		super.onResume();
 		
 		setUpMapIfNeeded();
+	}
+	
+	@Override
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+		super.onActivityResult(requestCode, resultCode, data);
+		Session.getActiveSession().onActivityResult(this, requestCode, resultCode, data);
 	}
 	
 	@Override
@@ -464,6 +505,263 @@ public class MapScreen extends SherlockActivity{
         public void onDestroyActionMode(ActionMode mode) {
         }
     }
+	
+	/**A Dialog class to show hotel's info and social features*/
+	public class HotelInfoActivity extends Dialog {
+
+		int imageCount;
+		Context cx;
+		
+		String URL_GET_IMAGE_NAME = "http://www.jejaringhotel.com/android/search.php";
+		String URL_GET_IMAGE_FILE = "http://www.jejaringhotel.com/android/search2.php";
+		String hotelName;
+		
+		ProgressBar inProgress;
+		LinearLayout myGallery;
+		Button shareFacebook;
+		
+		protected HotelInfoActivity(Context context, String name) {
+			super(context);
+			cx = context;
+			hotelName = name;
+			getWindow().setBackgroundDrawable(new ColorDrawable(0));
+			// TODO Auto-generated constructor stub
+		}
+
+		@Override
+	    public void onCreate(Bundle savedInstanceState) {
+	        super.onCreate(savedInstanceState);
+	        setContentView(R.layout.hotel_info_activity);
+	        
+	        myGallery = (LinearLayout)findViewById(R.id.mygallery);
+	        shareFacebook = (Button)findViewById(R.id.btnFacebookShare);
+	        shareFacebook.setOnClickListener(new android.view.View.OnClickListener() {
+				
+				@Override
+				public void onClick(View v) {
+					// TODO Auto-generated method stub
+					createFacebookConnection();
+				}
+			});        
+	        
+	        int count = 0;
+	        while(count < 6) {
+	        	myGallery.addView(addProgress());
+	        	count++;
+	        }
+	        
+	        Log.v("COUNT", "sum: "+myGallery.getChildCount());
+	        new FetchImageTask().execute();
+	        
+	    }
+	    
+		View addProgress(){
+			LinearLayout layout = new LinearLayout(cx);
+	    	layout.setLayoutParams(new LayoutParams(180, 180));
+	    	layout.setGravity(Gravity.CENTER);
+	    	
+	    	inProgress = new ProgressBar(cx);
+	    	inProgress.setLayoutParams(new LayoutParams(40, 40));
+	    	inProgress.setIndeterminate(true);
+	    	
+	    	layout.addView(inProgress);
+	    	
+	    	return layout;
+	    }
+		
+	    View insertPhoto(Bitmap bm){
+	    	LinearLayout layout = new LinearLayout(cx);
+	    	layout.setLayoutParams(new LayoutParams(180, 180));
+	    	layout.setGravity(Gravity.CENTER);
+	    	
+	    	ImageView imageView = new ImageView(cx);
+	    	imageView.setLayoutParams(new LayoutParams(160, 160));
+	    	imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
+	    	imageView.setImageBitmap(bm);
+	    	
+	    	layout.addView(imageView);
+	    	return layout;
+	    }
+	    
+	    public Bitmap decodeSampledBitmapFromUri(String path, int reqWidth, int reqHeight) {
+	    	Bitmap bm = null;
+	    	
+	    	// First decode with inJustDecodeBounds=true to check dimensions
+	    	final BitmapFactory.Options options = new BitmapFactory.Options();
+	    	options.inJustDecodeBounds = true;
+	    	BitmapFactory.decodeFile(path, options);
+	    	
+	    	// Calculate inSampleSize
+	    	options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight);
+	    	
+	    	// Decode bitmap with inSampleSize set
+	    	options.inJustDecodeBounds = false;
+	    	bm = BitmapFactory.decodeFile(path, options); 
+	    	
+	    	return bm; 	
+	    }
+	    
+	    public int calculateInSampleSize(
+	    		
+	    	BitmapFactory.Options options, int reqWidth, int reqHeight) {
+	    	// Raw height and width of image
+	    	final int height = options.outHeight;
+	    	final int width = options.outWidth;
+	    	int inSampleSize = 1;
+	        
+	    	if (height > reqHeight || width > reqWidth) {
+	    		if (width > height) {
+	    			inSampleSize = Math.round((float)height / (float)reqHeight);  	
+	    		} else {
+	    			inSampleSize = Math.round((float)width / (float)reqWidth);  	
+	    		}  	
+	    	}
+	    	
+	    	return inSampleSize;  	
+	    }
+	    
+	    public void createFacebookConnection() {
+	        Session session = new Session(MapScreen.this);
+	        Session.setActiveSession(session);
+
+	        Settings.addLoggingBehavior(LoggingBehavior.INCLUDE_ACCESS_TOKENS);
+
+	        Session.StatusCallback statusCallback = new Session.StatusCallback() {
+	            @Override
+	            public void call(Session session, SessionState state, Exception exception) {
+	                String message = "Facebook session status changed - " + session.getState() + " - Exception: " + exception;
+	                Log.w("Facebook test", message);
+
+	                if (session.isOpened() || session.getPermissions().contains("publish_actions")) {
+	                    publishToWall();
+	                } else if (session.isOpened()) {
+	                    OpenRequest open = new OpenRequest(MapScreen.this).setCallback(this);
+	                    List<String> permission = new ArrayList<String>();
+	                    permission.add("publish_actions");
+	                    open.setPermissions(permission);
+	                    Log.w("Facebook test", "Open for publish");
+	                    session.openForPublish(open);
+	                }
+	            }
+	        };
+
+	        if (!session.isOpened() && !session.isClosed() && session.getState() != SessionState.OPENING) {
+	            session.openForRead(new Session.OpenRequest(MapScreen.this).setCallback(statusCallback));
+	        } else {
+	            Log.w("Facebook test", "Open active session");
+	            Session.openActiveSession(MapScreen.this, true, statusCallback);
+	        }
+	    }
+
+	    void publishToWall() {
+	        Session session = Session.getActiveSession();
+
+	        Bundle postParams = new Bundle();
+	        postParams.putString("name", "Merauke Android");
+	        postParams.putString("caption", hotelName);
+	        postParams.putString("description", hotelName+" is a luxury hotel which is located in the city of Bandung.");
+	        postParams.putString("link", "https://developers.facebook.com/android");
+	        postParams.putString("picture", "http://www.jejaringhotel.com/android/hotelimages/hotel-3.jpg");
+	        Log.i("DIALOG","feed set");
+
+	        Request.Callback callback = new Request.Callback() {
+	            public void onCompleted(Response response) {
+	                FacebookRequestError error = response.getError();
+	                if (error != null) {
+	                    Toast.makeText(MapScreen.this, error.getErrorMessage(), Toast.LENGTH_SHORT).show();
+	                } else {
+	                    JSONObject graphResponse = response.getGraphObject().getInnerJSONObject();
+	                    String postId = null;
+	                    try {
+	                        postId = graphResponse.getString("id");
+	                    } catch (JSONException e) {
+	                        Log.i("Facebook error", "JSON error " + e.getMessage());
+	                    }
+	                    //TODO Toast.makeText(context, postId, Toast.LENGTH_LONG).show();
+	                    Toast.makeText(MapScreen.this, "Posted on wall success!", Toast.LENGTH_SHORT).show();
+	                }
+	            }
+	        };
+
+	        Request request = new Request(Session.getActiveSession(), "me/feed", postParams, HttpMethod.POST, callback);
+
+	        RequestAsyncTask task = new RequestAsyncTask(request);
+	        task.execute();
+	    }
+	    
+	                
+	    ArrayList<Bitmap> photosImage = new ArrayList<Bitmap>();
+	    
+	    Handler displayImage = new Handler() {
+	    	@Override
+	    	public void handleMessage(android.os.Message msg) {
+	    		switch(msg.what) {
+	    		case 1:
+	    			Log.d("Display", "incoming image!!!");
+	    			myGallery.removeViewAt(imageCount);
+	    			myGallery.addView(insertPhoto(photosImage.get(0)), imageCount);
+	    			imageCount++;
+	    			
+	    			photosImage.remove(0);
+	    			break;
+	    		}
+	    	};
+	    };
+	    
+	    public class FetchImageTask extends AsyncTask<String, Integer, Void> {
+
+	    	@Override
+	    	protected void onPreExecute() {
+	    		super.onPreExecute();
+	    		
+	    	}
+	    	
+			@Override
+			protected Void doInBackground(String... params) {
+				Map<String, String> input = new HashMap<String, String>();
+				input.put("id", "2");
+				
+				HttpRequest req = new HttpRequest(URL_GET_IMAGE_NAME, input, HttpRequest.Method.POST);
+				String response = req.sendRequest();
+				Log.i("FetchImage", response);
+				
+				processingStringResponse(response);
+				
+				return null;
+			}
+	    	
+			
+
+			private void processingStringResponse(String response) {
+				int count=0;
+				while(count < response.length()-1) {
+					int semicolonIndex = response.indexOf(";", count);
+					String realName = response.substring(count
+							, semicolonIndex);
+					Log.v("FetchImage", "name: "+realName);
+					
+					Map<String, String> input = new HashMap<String, String>();
+					input.put("name", realName);
+					
+					HttpRequest req = new HttpRequest(URL_GET_IMAGE_FILE
+							, input, HttpRequest.Method.POST);
+					
+					photosImage.add(BitmapFactory.decodeStream(req.getConnection()));
+					
+					displayImage.sendEmptyMessage(1);
+					
+					count = semicolonIndex + 1;
+				}
+			}
+
+			@Override
+			protected void onPostExecute(Void result) {
+				super.onPostExecute(result);
+				
+			}
+		}
+	}// End of custom Dialog class
+	
 	
 	public class CustomLocationListener implements LocationListener {
 
