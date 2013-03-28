@@ -5,10 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -21,13 +18,9 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Point;
-import android.graphics.drawable.ColorDrawable;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -36,15 +29,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
 import android.view.Display;
-import android.view.Gravity;
 import android.view.View;
-import android.view.ViewGroup.LayoutParams;
 import android.view.ViewTreeObserver.OnGlobalLayoutListener;
 import android.view.WindowManager;
-import android.widget.Button;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import com.actionbarsherlock.app.SherlockActivity;
@@ -53,16 +40,7 @@ import com.actionbarsherlock.view.Menu;
 import com.actionbarsherlock.view.MenuItem;
 import com.actionbarsherlock.view.SubMenu;
 import com.actionbarsherlock.view.Window;
-import com.facebook.FacebookRequestError;
-import com.facebook.HttpMethod;
-import com.facebook.LoggingBehavior;
-import com.facebook.Request;
-import com.facebook.RequestAsyncTask;
-import com.facebook.Response;
 import com.facebook.Session;
-import com.facebook.Session.OpenRequest;
-import com.facebook.SessionState;
-import com.facebook.Settings;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.GoogleMap.OnCameraChangeListener;
@@ -83,6 +61,7 @@ public class MapScreen extends SherlockActivity {
 	LatLng pointMax;
 	LatLng pointCenter;
 	LocationManager locationManager;
+	CustomLocationListener mlocListener;
 	ActionMode actionMode;
 	
 	private int mProgress = 100;
@@ -92,7 +71,8 @@ public class MapScreen extends SherlockActivity {
 	double factor;
 	boolean hasSetup = false;// just setup it for the first time
 	boolean isMarkerClick = false;
-	
+	String provider;	
+		
 	double projectionPointRange;// use this to measure range from center to 30% of edge
 	LatLng boundCenterPoint;// the center point that we keep and it only changes when our app loads new data
 	// LatLng cameraCenterPoint;// this store camera current position everytime the camera changes
@@ -104,14 +84,10 @@ public class MapScreen extends SherlockActivity {
 	
 	Point size = new Point();
 	Marker bandung;
-	// MapTabsScreen tabScreen;
 	
 	// String coordinates for Jl.Dipatiukur near ITHB initial to zoom
-	static String strOrigin[] = {"-6.888435", "107.615631"};
+	//static String strOrigin[] = {"-6.888435", "107.615631"};
 	static String HTTP_URL = "http://www.jejaringhotel.com/android/showme.php";
-	private static final List<String> PERMISSIONS = Arrays.asList("publish_actions");
-	private static final String PENDING_PUBLISH_KEY = "pendingPublishReauthorization";
-	private boolean pendingPublishReauthorization = false;
 	LatLng userCoordinate;// = new LatLng(-6.888435, 107.615631);
 	
 	@Override
@@ -122,13 +98,7 @@ public class MapScreen extends SherlockActivity {
 		requestWindowFeature(Window.FEATURE_PROGRESS);
 		
 		setContentView(R.layout.map_activity);
-				
-		// tabScreen = (MapTabsScreen) this.getParent();
-		// TODO next time check if there is any location provider
-		locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
-		LocationListener mlocListener = new CustomLocationListener();
-		locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0, mlocListener);
-		// locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, mlocListener);
+		provider = LocationManager.GPS_PROVIDER;
 		
 		WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
 		Display display = wm.getDefaultDisplay();
@@ -138,6 +108,7 @@ public class MapScreen extends SherlockActivity {
 		
 		setUpMapIfNeeded();
 		map.setMyLocationEnabled(true);
+		//mlocListener.onLocationChanged(locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER));
 		
 		map.setOnMarkerClickListener(new OnMarkerClickListener() {
 			
@@ -155,15 +126,11 @@ public class MapScreen extends SherlockActivity {
 			public void onInfoWindowClick(Marker marker) {
 				if(!marker.equals(bandung)) {
 					MarkerInfo eventInfo = hashMapInfo.get(marker);
-					//startActivity(new Intent(MapScreen.this, InfoActivity.class));
-				
-					HotelInfoActivity hotel = new HotelInfoActivity(MapScreen.this, eventInfo.infoTitle);
+					
+					HotelInfoActivity hotel = new HotelInfoActivity
+							(MapScreen.this, eventInfo.infoId, eventInfo.infoTitle);
 					hotel.setTitle(eventInfo.infoTitle);
 					hotel.show();
-					
-					//Fragment.instantiate(getBaseContext(), HotelInfoActivity.class.getName(), null);
-					//MapScreen.this.startActivity(new Intent(MapScreen.this, HotelInfoActivity.class));
-					// Toast.makeText(getBaseContext(), "name: "+eventInfo.infoTitle, Toast.LENGTH_SHORT).show();
 				}
 			}
 		});
@@ -195,8 +162,6 @@ public class MapScreen extends SherlockActivity {
                 setUpMap();
             }
         }
-        
-        // System.out.println("parent: "+this.getParent());
     }
 	
 	private void setUpMap() {
@@ -228,8 +193,7 @@ public class MapScreen extends SherlockActivity {
 	@Override
 	protected void onStart() {
 		super.onStart();
-		
-	 }
+	}
 	
 	@Override
 	protected void onDestroy() {
@@ -246,6 +210,15 @@ public class MapScreen extends SherlockActivity {
 		super.onResume();
 		
 		setUpMapIfNeeded();
+		
+		locationManager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
+		Location location = locationManager.getLastKnownLocation(provider);
+		mlocListener = new CustomLocationListener();
+		if(location != null) {
+			Log.v("LOCATION", "location is not null!!!");
+		    mlocListener.onLocationChanged(location);
+		}
+	    locationManager.requestLocationUpdates(provider, 0, 500, mlocListener);
 	}
 	
 	@Override
@@ -256,9 +229,6 @@ public class MapScreen extends SherlockActivity {
 	
 	@Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        //Used to put dark icons on light action bar
-        // boolean isLight = SampleList.THEME == R.style.Theme_Sherlock_Light;
-
         menu.add("Filter")
             .setIcon(R.drawable.options_48)
             .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
@@ -268,9 +238,7 @@ public class MapScreen extends SherlockActivity {
 	
 	@Override
 	public boolean onOptionsItemSelected(MenuItem item) {
-		// TODO Auto-generated method stub
 		actionMode = startActionMode(new AnActionModeOfEpicProportions());
-		
 		return super.onOptionsItemSelected(item);
 	}
 	
@@ -323,10 +291,10 @@ public class MapScreen extends SherlockActivity {
 		int count = 0;
 		while(count < listInfo.size()) {
 			if(!((listInfo.get(count)).rank).contains(stars)) {
-				System.out.println("star not match");
+				//System.out.println("star not match");
 				listMarkers.get(count).setVisible(false);
 			} else {
-				System.out.println("star match");
+				//System.out.println("star match");
 				listMarkers.get(count).setVisible(true);
 			}
 			count++;
@@ -359,11 +327,39 @@ public class MapScreen extends SherlockActivity {
 		};
 	};
 	
+	public class CustomLocationListener implements LocationListener {
+
+		public void onLocationChanged(Location location) {
+			// TODO Auto-generated method stub
+			System.out.println("Location Updated");
+			userCoordinate = new LatLng(location.getLatitude(), location.getLongitude());
+			// Move the camera instantly to kiel with a zoom of 15.
+    		map.moveCamera(CameraUpdateFactory.newLatLngZoom(userCoordinate, 14));
+
+    		// Zoom in, animating the camera.
+    		map.animateCamera(CameraUpdateFactory.zoomTo(14), 2000, null);
+		}
+
+		public void onProviderDisabled(String provider) {
+			System.out.println("provider disabled");
+			Toast.makeText(getBaseContext(), "GPS mode disabled", Toast.LENGTH_SHORT).show();
+		}
+
+		public void onProviderEnabled(String provider) {
+			System.out.println("provider enabled");
+			Toast.makeText(getBaseContext(), "GPS mode enabled", Toast.LENGTH_SHORT).show();
+		}
+
+		public void onStatusChanged(String provider, int status, Bundle extras) {
+			
+		}
+		
+	}
+	
 	/**
 	 * get inputstream data from http request
 	 * */
 	private InputStream getConnection(String url) {
-		// TODO
 		progressHandler.sendEmptyMessage(20);
 		InputStream is = null;
 	
@@ -374,7 +370,6 @@ public class MapScreen extends SherlockActivity {
 	      StatusLine statusLine = response.getStatusLine();
 	      int statusCode = statusLine.getStatusCode();
 	      if (statusCode == 200) {
-	    	  // TODO
 	    	  progressHandler.sendEmptyMessage(30);
 	        HttpEntity entity = response.getEntity();
 	        is = entity.getContent();
@@ -400,6 +395,7 @@ public class MapScreen extends SherlockActivity {
 			JSONObject jsonElement = null;
 			double posLat = 0;
 			double posLng = 0;
+			String id = "";
 			String name = "";
 			String alamat = "";
 			Log.v("MapScreen", "total: "+rowArray.length());
@@ -414,6 +410,7 @@ public class MapScreen extends SherlockActivity {
 							(jsonElement.getString("lat"));
 					posLng = Double.parseDouble
 							(jsonElement.getString("lng"));
+					id = String.valueOf(jsonElement.getInt("id"));
 					name = jsonElement.getString("namalokasi");
 					alamat = jsonElement.getString("alamat");
 					number = jsonElement.getString("jenis");
@@ -421,7 +418,7 @@ public class MapScreen extends SherlockActivity {
 					// convert double coord to lat and lng
 					LatLng markPos = new LatLng(posLat, posLng);
 					// add the markinfo to the list
-					listInfo.add(new MarkerInfo(markPos, name, alamat, number));
+					listInfo.add(new MarkerInfo(markPos, id, name, alamat, number));
 					
 					count++;
 				}
@@ -441,13 +438,6 @@ public class MapScreen extends SherlockActivity {
 		MenuItem subMenuItem;
         @Override
         public boolean onCreateActionMode(ActionMode mode, Menu menu) {
-            //Used to put dark icons on light action bar
-            // boolean isLight = SampleList.THEME == R.style.Theme_Sherlock_Light;
-/*
-            menu.add("Stars")
-                .setIcon(R.drawable.star_48)
-                .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
-*/
             menu.add("Powers")
                 .setIcon(R.drawable.light_48)
                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
@@ -506,336 +496,6 @@ public class MapScreen extends SherlockActivity {
         }
     }
 	
-	/**A Dialog class to show hotel's info and social features*/
-	public class HotelInfoActivity extends Dialog {
-
-		int imageCount;
-		Context cx;
-		
-		String URL_GET_IMAGE_NAME = "http://www.jejaringhotel.com/android/search.php";
-		String URL_GET_IMAGE_FILE = "http://www.jejaringhotel.com/android/search2.php";
-		String hotelName;
-		
-		ProgressBar inProgress;
-		LinearLayout myGallery;
-		Button shareFacebook;
-		
-		protected HotelInfoActivity(Context context, String name) {
-			super(context);
-			cx = context;
-			hotelName = name;
-			getWindow().setBackgroundDrawable(new ColorDrawable(0));
-			// TODO Auto-generated constructor stub
-		}
-
-		@Override
-	    public void onCreate(Bundle savedInstanceState) {
-	        super.onCreate(savedInstanceState);
-	        setContentView(R.layout.hotel_info_activity);
-	        
-	        myGallery = (LinearLayout)findViewById(R.id.mygallery);
-	        shareFacebook = (Button)findViewById(R.id.btnFacebookShare);
-	        shareFacebook.setOnClickListener(new android.view.View.OnClickListener() {
-				
-				@Override
-				public void onClick(View v) {
-					// TODO Auto-generated method stub
-					createFacebookConnection();
-				}
-			});        
-	        
-	        int count = 0;
-	        while(count < 6) {
-	        	myGallery.addView(addProgress());
-	        	count++;
-	        }
-	        
-	        Log.v("COUNT", "sum: "+myGallery.getChildCount());
-	        new FetchImageTask().execute();
-	        
-	    }
-	    
-		View addProgress(){
-			LinearLayout layout = new LinearLayout(cx);
-	    	layout.setLayoutParams(new LayoutParams(180, 180));
-	    	layout.setGravity(Gravity.CENTER);
-	    	
-	    	inProgress = new ProgressBar(cx);
-	    	inProgress.setLayoutParams(new LayoutParams(40, 40));
-	    	inProgress.setIndeterminate(true);
-	    	
-	    	layout.addView(inProgress);
-	    	
-	    	return layout;
-	    }
-		
-	    View insertPhoto(Bitmap bm){
-	    	LinearLayout layout = new LinearLayout(cx);
-	    	layout.setLayoutParams(new LayoutParams(180, 180));
-	    	layout.setGravity(Gravity.CENTER);
-	    	
-	    	ImageView imageView = new ImageView(cx);
-	    	imageView.setLayoutParams(new LayoutParams(160, 160));
-	    	imageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-	    	imageView.setImageBitmap(bm);
-	    	
-	    	layout.addView(imageView);
-	    	return layout;
-	    }
-	    
-	    public Bitmap decodeSampledBitmapFromUri(String path, int reqWidth, int reqHeight) {
-	    	Bitmap bm = null;
-	    	
-	    	// First decode with inJustDecodeBounds=true to check dimensions
-	    	final BitmapFactory.Options options = new BitmapFactory.Options();
-	    	options.inJustDecodeBounds = true;
-	    	BitmapFactory.decodeFile(path, options);
-	    	
-	    	// Calculate inSampleSize
-	    	options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight);
-	    	
-	    	// Decode bitmap with inSampleSize set
-	    	options.inJustDecodeBounds = false;
-	    	bm = BitmapFactory.decodeFile(path, options); 
-	    	
-	    	return bm; 	
-	    }
-	    
-	    public int calculateInSampleSize(
-	    		
-	    	BitmapFactory.Options options, int reqWidth, int reqHeight) {
-	    	// Raw height and width of image
-	    	final int height = options.outHeight;
-	    	final int width = options.outWidth;
-	    	int inSampleSize = 1;
-	        
-	    	if (height > reqHeight || width > reqWidth) {
-	    		if (width > height) {
-	    			inSampleSize = Math.round((float)height / (float)reqHeight);  	
-	    		} else {
-	    			inSampleSize = Math.round((float)width / (float)reqWidth);  	
-	    		}  	
-	    	}
-	    	
-	    	return inSampleSize;  	
-	    }
-	    
-	    public void createFacebookConnection() {
-	        Session session = new Session(MapScreen.this);
-	        Session.setActiveSession(session);
-
-	        Settings.addLoggingBehavior(LoggingBehavior.INCLUDE_ACCESS_TOKENS);
-
-	        Session.StatusCallback statusCallback = new Session.StatusCallback() {
-	            @Override
-	            public void call(Session session, SessionState state, Exception exception) {
-	                String message = "Facebook session status changed - " + session.getState() + " - Exception: " + exception;
-	                Log.w("Facebook test", message);
-
-	                if (session.isOpened() || session.getPermissions().contains("publish_actions")) {
-	                    publishToWall();
-	                } else if (session.isOpened()) {
-	                    OpenRequest open = new OpenRequest(MapScreen.this).setCallback(this);
-	                    List<String> permission = new ArrayList<String>();
-	                    permission.add("publish_actions");
-	                    open.setPermissions(permission);
-	                    Log.w("Facebook test", "Open for publish");
-	                    session.openForPublish(open);
-	                }
-	            }
-	        };
-
-	        if (!session.isOpened() && !session.isClosed() && session.getState() != SessionState.OPENING) {
-	            session.openForRead(new Session.OpenRequest(MapScreen.this).setCallback(statusCallback));
-	        } else {
-	            Log.w("Facebook test", "Open active session");
-	            Session.openActiveSession(MapScreen.this, true, statusCallback);
-	        }
-	    }
-
-	    void publishToWall() {
-	        Session session = Session.getActiveSession();
-
-	        Bundle postParams = new Bundle();
-	        postParams.putString("name", "Merauke Android");
-	        postParams.putString("caption", hotelName);
-	        postParams.putString("description", hotelName+" is a luxury hotel which is located in the city of Bandung.");
-	        postParams.putString("link", "https://developers.facebook.com/android");
-	        postParams.putString("picture", "http://www.jejaringhotel.com/android/hotelimages/hotel-3.jpg");
-	        Log.i("DIALOG","feed set");
-
-	        Request.Callback callback = new Request.Callback() {
-	            public void onCompleted(Response response) {
-	                FacebookRequestError error = response.getError();
-	                if (error != null) {
-	                    Toast.makeText(MapScreen.this, error.getErrorMessage(), Toast.LENGTH_SHORT).show();
-	                } else {
-	                    JSONObject graphResponse = response.getGraphObject().getInnerJSONObject();
-	                    String postId = null;
-	                    try {
-	                        postId = graphResponse.getString("id");
-	                    } catch (JSONException e) {
-	                        Log.i("Facebook error", "JSON error " + e.getMessage());
-	                    }
-	                    //TODO Toast.makeText(context, postId, Toast.LENGTH_LONG).show();
-	                    Toast.makeText(MapScreen.this, "Posted on wall success!", Toast.LENGTH_SHORT).show();
-	                }
-	            }
-	        };
-
-	        Request request = new Request(Session.getActiveSession(), "me/feed", postParams, HttpMethod.POST, callback);
-
-	        RequestAsyncTask task = new RequestAsyncTask(request);
-	        task.execute();
-	    }
-	    
-	                
-	    ArrayList<Bitmap> photosImage = new ArrayList<Bitmap>();
-	    
-	    Handler displayImage = new Handler() {
-	    	@Override
-	    	public void handleMessage(android.os.Message msg) {
-	    		switch(msg.what) {
-	    		case 1:
-	    			Log.d("Display", "incoming image!!!");
-	    			myGallery.removeViewAt(imageCount);
-	    			myGallery.addView(insertPhoto(photosImage.get(0)), imageCount);
-	    			imageCount++;
-	    			
-	    			photosImage.remove(0);
-	    			break;
-	    		}
-	    	};
-	    };
-	    
-	    public class FetchImageTask extends AsyncTask<String, Integer, Void> {
-
-	    	@Override
-	    	protected void onPreExecute() {
-	    		super.onPreExecute();
-	    		
-	    	}
-	    	
-			@Override
-			protected Void doInBackground(String... params) {
-				Map<String, String> input = new HashMap<String, String>();
-				input.put("id", "2");
-				
-				HttpRequest req = new HttpRequest(URL_GET_IMAGE_NAME, input, HttpRequest.Method.POST);
-				String response = req.sendRequest();
-				Log.i("FetchImage", response);
-				
-				processingStringResponse(response);
-				
-				return null;
-			}
-	    	
-			
-
-			private void processingStringResponse(String response) {
-				int count=0;
-				while(count < response.length()-1) {
-					int semicolonIndex = response.indexOf(";", count);
-					String realName = response.substring(count
-							, semicolonIndex);
-					Log.v("FetchImage", "name: "+realName);
-					
-					Map<String, String> input = new HashMap<String, String>();
-					input.put("name", realName);
-					
-					HttpRequest req = new HttpRequest(URL_GET_IMAGE_FILE
-							, input, HttpRequest.Method.POST);
-					
-					photosImage.add(BitmapFactory.decodeStream(req.getConnection()));
-					
-					displayImage.sendEmptyMessage(1);
-					
-					count = semicolonIndex + 1;
-				}
-			}
-
-			@Override
-			protected void onPostExecute(Void result) {
-				super.onPostExecute(result);
-				
-			}
-		}
-	}// End of custom Dialog class
-	
-	
-	public class CustomLocationListener implements LocationListener {
-
-		@Override
-		public void onLocationChanged(Location location) {
-			// TODO Auto-generated method stub
-			System.out.println("Location Updated");
-			userCoordinate = new LatLng(location.getLatitude(), location.getLongitude());
-			//map.moveCamera(CameraUpdateFactory.newLatLngZoom(userCoordinate, 14));
-			if(bandung == null) {
-				// Move the camera instantly to kiel with a zoom of 15.
-	    		map.moveCamera(CameraUpdateFactory.newLatLngZoom(userCoordinate, 14));
-
-	    		// TODO Zoom in, animating the camera.
-	    		map.animateCamera(CameraUpdateFactory.zoomTo(14), 2000, null);
-				
-				bandung = map.addMarker(new MarkerOptions()
-		        .position(userCoordinate)
-		        .title("Bandung")
-		        .snippet("You're here")
-		        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)));
-			}
-			
-			bandung.setPosition(userCoordinate);
-		}
-
-		@Override
-		public void onProviderDisabled(String provider) {
-			// TODO Auto-generated method stub
-			System.out.println("provider disabled");
-			Toast.makeText(getBaseContext(), "GPS mode disabled", Toast.LENGTH_SHORT).show();
-			/*
-			AlertDialog.Builder alertBuilder = new AlertDialog.Builder(MapScreen.this);
-			alertBuilder.setCancelable(true);
-			alertBuilder.setMessage("Do you want to turn GPS on?");
-			alertBuilder.setTitle("GPS disabled");
-			alertBuilder.setPositiveButton("Yes", new OnClickListener() {
-				
-				@Override
-				public void onClick(DialogInterface dialog, int which) {
-					MapScreen.this.startActivity(new Intent
-							(Settings.ACTION_LOCATION_SOURCE_SETTINGS));
-				}
-			});
-			alertBuilder.setNegativeButton("No", new OnClickListener() {
-				
-				@Override
-				public void onClick(DialogInterface dialog, int which) {
-					return;
-				}
-			});
-			alertBuilder.setOnCancelListener(new OnCancelListener() {
-				
-				@Override
-				public void onCancel(DialogInterface dialog) {
-					return;
-				}
-			});
-			alertBuilder.show();
-			*/
-		}
-
-		@Override
-		public void onProviderEnabled(String provider) {
-			System.out.println("provider enabled");
-			Toast.makeText(getBaseContext(), "GPS mode enabled", Toast.LENGTH_SHORT).show();
-		}
-
-		@Override
-		public void onStatusChanged(String provider, int status, Bundle extras) {
-			
-		}
-		
-	}
 	
 	private class FetchDataTask extends AsyncTask<String, Integer, Void> {
 		
@@ -846,9 +506,6 @@ public class MapScreen extends SherlockActivity {
 			if (mProgress >= 100) {
                 mProgress = 0;
             }
-			
-			// tabScreen.setSupportProgressBarIndeterminateVisibility(true);
-			// setSupportProgressBarIndeterminateVisibility(true);
 			
 			calculateRangeDistance();
 			clearJustHotels();
@@ -881,7 +538,6 @@ public class MapScreen extends SherlockActivity {
 	    	Log.d("MapScreen", "onPost:"+mProgress);
 			int count = 0;
 			while(count < listInfo.size()) {
-				
 					// get the info from info list
 					MarkerInfo mo = listInfo.get(count);
 					
@@ -913,13 +569,6 @@ public class MapScreen extends SherlockActivity {
 					hashMapInfo.put(marker, mo);
 					count++;
 			}
-			// tabScreen.setSupportProgressBarIndeterminateVisibility(false);
-			// setSupportProgressBarIndeterminateVisibility(false);
-	    }
-	    
-	    
+		}
 	}
-
-	
-		
 }

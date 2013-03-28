@@ -23,22 +23,33 @@ import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
 import android.widget.TextView;
+
 import com.facebook.LoggingBehavior;
+import com.facebook.Request;
+import com.facebook.Response;
 import com.facebook.Session;
 import com.facebook.SessionState;
 import com.facebook.Settings;
+import com.facebook.UiLifecycleHelper;
+import com.facebook.model.GraphUser;
 
 public class LoginUsingActivityActivity extends Activity {
     private static final String URL_PREFIX_FRIENDS = "https://graph.facebook.com/me/friends?access_token=";
-
-    private TextView textInstructionsOrLink;
+    private UiLifecycleHelper uiHelper;
+    private boolean justFirst = true;
+    private static final int REAUTH_ACTIVITY_CODE = 100;
+	private TextView textInstructionsOrLink;
     private Button buttonLoginLogout;
     private Session.StatusCallback statusCallback = new SessionStatusCallback();
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+    	uiHelper = new UiLifecycleHelper(this, callback);
+    	
         super.onCreate(savedInstanceState);
+        
         setContentView(R.layout.activity);
+        
         buttonLoginLogout = (Button)findViewById(R.id.buttonLoginLogout);
         textInstructionsOrLink = (TextView)findViewById(R.id.instructionsOrLink);
 
@@ -74,18 +85,87 @@ public class LoginUsingActivityActivity extends Activity {
     }
 
     @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        Session.getActiveSession().onActivityResult(this, requestCode, resultCode, data);
-    }
-
-    @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         Session session = Session.getActiveSession();
         Session.saveSession(session, outState);
+        uiHelper.onSaveInstanceState(outState);
     }
 
+    @Override
+	protected void onDestroy() {
+		super.onDestroy();
+		uiHelper.onDestroy();
+	}
+
+	@Override
+	protected void onPause() {
+		super.onPause();
+		uiHelper.onPause();
+	}
+
+	@Override
+	protected void onResume() {
+		super.onResume();
+		uiHelper.onResume();
+	}
+	
+	@Override
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+		super.onActivityResult(requestCode, resultCode, data);
+		if (requestCode == REAUTH_ACTIVITY_CODE) {
+	        uiHelper.onActivityResult(requestCode, resultCode, data);
+	    }
+		Session.getActiveSession().onActivityResult(this, requestCode, resultCode, data);
+	}
+	
+	private void makeMeRequest(final Session session) {
+	    // Make an API call to get user data and define a 
+	    // new callback to handle the response.
+	    Request request = Request.newMeRequest(session, 
+	            new Request.GraphUserCallback() {
+	        @Override
+	        public void onCompleted(GraphUser user, Response response) {
+	            // If the response is successful
+	            if (session == Session.getActiveSession()) {
+	                if (user != null) {
+	                    // Set the id for the ProfilePictureView
+	                    // view that in turn displays the profile picture.
+	                	if(justFirst) {
+	                		UserInfo.userId = user.getId();
+		                	System.out.println(UserInfo.userId);
+		                	
+		                	UserInfo.userName = user.getName();
+		                	System.out.println(UserInfo.userName);
+		                	
+		            		new UploadBitmap(UserInfo.userId).execute();
+		            		
+		                	justFirst = false;
+	                	}
+	                }
+	            }
+	            if (response.getError() != null) {
+	                // Handle errors, will do so later.
+	            }
+	        }
+	    });
+	    request.executeAsync();
+	} 
+	
+	private void onSessionStateChange(final Session session, SessionState state, Exception exception) {
+	    if (session != null && session.isOpened()) {
+	        // Get the user's data.
+	        makeMeRequest(session);
+	    }
+	}
+	
+	private Session.StatusCallback callback = new Session.StatusCallback() {
+	    @Override
+	    public void call(final Session session, final SessionState state, final Exception exception) {
+	        onSessionStateChange(session, state, exception);
+	    }
+	};
+    
     private void updateView() {
         Session session = Session.getActiveSession();
         if (session.isOpened()) {
@@ -93,7 +173,8 @@ public class LoginUsingActivityActivity extends Activity {
             buttonLoginLogout.setText(R.string.logout);
             buttonLoginLogout.setOnClickListener(new OnClickListener() {
                 public void onClick(View view) { onClickLogout(); }
-            });
+            });// TODO
+            makeMeRequest(session);
             startActivity(new Intent(LoginUsingActivityActivity.this, MapScreen.class));
         } else {
             textInstructionsOrLink.setText(R.string.instructions);

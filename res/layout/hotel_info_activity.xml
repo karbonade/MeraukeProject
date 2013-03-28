@@ -1,12 +1,14 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
 
     <HorizontalScrollView
+        android:id="@+id/hsvPhotos"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content" >
+        android:layout_height="wrap_content" 
+        android:layout_alignParentTop="true">
         <LinearLayout
             android:id="@+id/mygallery"
             android:layout_width="wrap_content"
@@ -19,10 +21,41 @@
         android:id="@+id/btnFacebookShare"
 	    android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_below="@+id/hsvPhotos"
         android:background="@drawable/com_facebook_loginbutton_blue"
         android:textColor="#ffffff"
         android:textStyle="bold"
         android:text="Share"
         />
     
-</LinearLayout>
+    <LinearLayout 
+        android:id="@+id/lvComment"
+	    android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_above="@+id/llQueryBox"
+        android:layout_below="@+id/btnFacebookShare"
+        />
+    <LinearLayout 
+        android:id="@+id/llQueryBox"
+	    android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_alignParentBottom="true"
+        >
+        
+        <EditText 
+            android:id="@+id/edComment"
+	    	android:layout_width="match_parent"
+        	android:layout_height="wrap_content"
+        	android:layout_weight="1"
+        	android:hint="comment here"
+            />
+        <Button 
+            android:id="@+id/btnComment"
+	    	android:layout_width="match_parent"
+        	android:layout_height="wrap_content"
+        	android:layout_weight="4"
+        	android:text="Send"
+            />
+    </LinearLayout>
+</RelativeLayout>

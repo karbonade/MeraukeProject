@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content" >
+    
+    <ImageView 
+        android:id="@+id/ivCommPhoto"
+        android:layout_width="wrap_content"
+    	android:layout_height="wrap_content"
+    	android:layout_margin="10dp"
+        android:src="@drawable/com_facebook_profile_default_icon"
+        />
+
+    <TextView 
+        android:id="@+id/tvCommName"
+        android:layout_width="match_parent"
+    	android:layout_height="wrap_content"
+    	android:layout_toRightOf="@+id/ivCommPhoto"
+    	android:layout_alignTop="@+id/ivCommPhoto"
+    	android:textStyle="bold"
+    	android:textColor="#fff"
+    	android:textSize="16sp"
+    	android:text="Username"
+        />
+    
+    <TextView 
+        android:id="@+id/tvCommComment"
+        android:layout_width="match_parent"
+    	android:layout_height="wrap_content"
+    	android:layout_alignLeft="@+id/tvCommName"
+    	android:layout_below="@+id/tvCommName"
+    	android:textColor="#fff"
+    	android:textSize="14sp"
+    	android:text="Dolor sit amet"
+        />
+    
+</RelativeLayout>

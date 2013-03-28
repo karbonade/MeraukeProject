@@ -8,11 +8,13 @@ public class MarkerInfo {
 	String infoTitle;
 	String infoComment;
 	String rank;
+	String infoId;
 	
-	public MarkerInfo(LatLng coord, String title, String comment, String number) {
+	public MarkerInfo(LatLng coord, String id, String title, String comment, String number) {
 		infoCoord = coord;
 		infoTitle = title;
 		infoComment = comment;
+		infoId = id;
 		rank = number;
 	}
 	

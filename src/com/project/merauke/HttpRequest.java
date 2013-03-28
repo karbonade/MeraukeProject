@@ -128,7 +128,7 @@ public class HttpRequest {
 
 		return responseString;
 	}
-
+	
 	public List<BasicNameValuePair> encodePostParameter(Map<String, String> params) {
 		List<BasicNameValuePair> nameValuePairs = new ArrayList<BasicNameValuePair>(1);
 		Set<String> keys = params.keySet();
