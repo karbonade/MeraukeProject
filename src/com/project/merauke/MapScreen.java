@@ -20,6 +20,8 @@ import org.json.JSONObject;
 
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Point;
 import android.location.Location;
 import android.location.LocationListener;
@@ -65,6 +67,7 @@ public class MapScreen extends SherlockActivity {
 	ActionMode actionMode;
 	
 	private int mProgress = 100;
+	int utilityCode; // TODO code: 0 gas, 1 money, 2 food
 	int ScreenWidth;
 	int ScreenHeight;
 	float zoomFactor;
@@ -79,7 +82,9 @@ public class MapScreen extends SherlockActivity {
 		
 	HashMap<Marker, MarkerInfo> hashMapInfo = new HashMap<Marker, MarkerInfo>();
 	ArrayList<MarkerInfo> listInfo = new ArrayList<MarkerInfo>();
+	ArrayList<MarkerInfo> utilInfo = new ArrayList<MarkerInfo>();
 	ArrayList<Marker> listMarkers = new ArrayList<Marker>();
+	ArrayList<Marker> utilMarkers = new ArrayList<Marker>();
 	Marker marker;
 	
 	Point size = new Point();
@@ -124,7 +129,7 @@ public class MapScreen extends SherlockActivity {
 			
 			@Override
 			public void onInfoWindowClick(Marker marker) {
-				if(!marker.equals(bandung)) {
+				if(listMarkers.contains(marker)) {
 					MarkerInfo eventInfo = hashMapInfo.get(marker);
 					
 					HotelInfoActivity hotel = new HotelInfoActivity
@@ -143,6 +148,7 @@ public class MapScreen extends SherlockActivity {
 					if(!isMarkerClick && isCameraOutOfBounds(position)) {
 						System.out.println("it's moving");
 						new FetchDataTask().execute();
+						new UtilityTask().execute();
 					} else {
 						isMarkerClick = false;
 					}
@@ -312,6 +318,17 @@ public class MapScreen extends SherlockActivity {
 		listMarkers.clear();// remove marker from list
 	}
 	
+	public void clearJustPowers() {
+		int count = 0;
+		int total = utilMarkers.size();
+		while(count < total) {
+			utilMarkers.get(count).remove();// remove marker from map
+			
+			count++;
+		}
+		utilMarkers.clear();// remove marker from list
+	}
+	
 	Handler progressHandler = new Handler() {
 		@Override
 		public void handleMessage(android.os.Message msg) {
@@ -386,7 +403,6 @@ public class MapScreen extends SherlockActivity {
 	}
 	
 	private void processingJSON(String strJSON) {
-		
 		try {
 			JSONArray rowArray = new JSONArray(strJSON);
 			
@@ -415,11 +431,52 @@ public class MapScreen extends SherlockActivity {
 					alamat = jsonElement.getString("alamat");
 					number = jsonElement.getString("jenis");
 					
-					// convert double coord to lat and lng
 					LatLng markPos = new LatLng(posLat, posLng);
-					// add the markinfo to the list
 					listInfo.add(new MarkerInfo(markPos, id, name, alamat, number));
 					
+					count++;
+				}
+				progressHandler.sendEmptyMessage(50);
+				Log.d("JSON", "loading data finish");
+			} else {
+				progressHandler.sendEmptyMessage(100);// quickly dismiss
+				Log.d("JSON", "EMPTY");
+			}
+		} catch (JSONException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	private void utilityJSON(String strJSON) {
+		try {
+			JSONArray rowArray = new JSONArray(strJSON);
+			
+			int count = 0;
+			String type = "";
+			JSONObject jsonElement = null;
+			double posLat = 0;
+			double posLng = 0;
+			String id = "";
+			String name = "";
+			String alamat = "";
+			Log.v("MapScreen", "total: "+rowArray.length());
+			if(rowArray.length() != 0) {
+				utilInfo.clear();
+				
+				while(count < rowArray.length()) {
+					
+					jsonElement = rowArray.getJSONObject(count);
+					posLat = Double.parseDouble
+							(jsonElement.getString("lat"));
+					posLng = Double.parseDouble
+							(jsonElement.getString("lng"));
+					id = String.valueOf(jsonElement.getInt("id"));
+					name = jsonElement.getString("namalokasi");
+					type = jsonElement.getString("jenis");
+					
+					LatLng markPos = new LatLng(posLat, posLng);
+					utilInfo.add(new MarkerInfo(markPos, id, name, null, type));
+					// TODO
 					count++;
 				}
 				progressHandler.sendEmptyMessage(50);
@@ -445,6 +502,10 @@ public class MapScreen extends SherlockActivity {
             menu.add("Atm")
                 .setIcon(R.drawable.disc_48)
                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+            
+            menu.add("Leisure")
+            .setIcon(R.drawable.videos_48)
+            .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
 
             SubMenu star = menu.addSubMenu("Stars");
             star.add("1 star");
@@ -469,23 +530,35 @@ public class MapScreen extends SherlockActivity {
         @Override
         public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
         	Toast.makeText(getBaseContext(), "item: "+item.getTitle(), Toast.LENGTH_SHORT).show();
-        	if(!item.equals(subMenuItem)) {
-        		if(item.getTitle().toString().equals("1 star")) {
-        			filterByStars("1");
-        		} else if(item.getTitle().toString().equals("2 stars")) {
-        			filterByStars("2");
-        		} else if(item.getTitle().toString().equals("3 stars")) {
-        			filterByStars("3");
-        		} else if(item.getTitle().toString().equals("4 stars")) {
-        			filterByStars("4");
-        		} else if(item.getTitle().toString().equals("5 stars")) {
-        			filterByStars("5");
-        		} else if(item.getTitle().toString().equals("All stars")) {
-        			filterByStars("");
-        		}
-        		mode.finish();
+        	if(item.getTitle().toString().equals("Powers")) {
+        		System.out.println("Gasoline kicked!!!");
+        		utilityCode = 0;
+        		new UtilityTask().execute();
+        	} else if(item.getTitle().toString().equals("Atm")) {
+        		System.out.println("Money kicked!!!");
+        		utilityCode = 1;
+        		new UtilityTask().execute();
+        	} else if(item.getTitle().toString().equals("Leisure")) {
+        		System.out.println("Food kicked!!!");
+        		utilityCode = 2;
+        		new UtilityTask().execute();
         	} else {
-        		
+        		if(!item.equals(subMenuItem)) {
+            		if(item.getTitle().toString().equals("1 star")) {
+            			filterByStars("1");
+            		} else if(item.getTitle().toString().equals("2 stars")) {
+            			filterByStars("2");
+            		} else if(item.getTitle().toString().equals("3 stars")) {
+            			filterByStars("3");
+            		} else if(item.getTitle().toString().equals("4 stars")) {
+            			filterByStars("4");
+            		} else if(item.getTitle().toString().equals("5 stars")) {
+            			filterByStars("5");
+            		} else if(item.getTitle().toString().equals("All stars")) {
+            			filterByStars("");
+            		}
+            		mode.finish();
+        		}
         	}
             
             return true;
@@ -567,6 +640,78 @@ public class MapScreen extends SherlockActivity {
 					listMarkers.add(marker);
 					// add data to hashmap
 					hashMapInfo.put(marker, mo);
+					count++;
+			}
+		}
+	}
+	
+	
+	private class UtilityTask extends AsyncTask<String, Integer, Void> {
+		String[] UTILITY_URL = {"http://www.jejaringhotel.com/android/showgas.php"
+				, "http://www.jejaringhotel.com/android/showmoney.php"
+				, "http://www.jejaringhotel.com/android/showfood.php"
+		};
+				
+		@Override
+		protected void onPreExecute() {
+			super.onPreExecute();
+			
+			if (mProgress >= 100) {
+                mProgress = 0;
+            }
+			
+			calculateRangeDistance();
+			clearJustPowers();
+		}
+		
+		@Override
+		protected Void doInBackground(String... params) {
+			StringBuilder builder = new StringBuilder();
+			BufferedReader reader = new BufferedReader(new InputStreamReader
+					(getConnection(UTILITY_URL[utilityCode]+"?maxLat="+pointMax.latitude+"&minLat="
+			+pointMin.latitude+"&minLng="+pointMin.longitude+"&maxLng="+pointMax.longitude)));
+	        String line;
+	        try {
+				while ((line = reader.readLine()) != null) {
+				  builder.append(line);
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+	        String strJSON = builder.toString();
+	        utilityJSON(strJSON);
+	        
+			return null;
+		}
+		
+		@Override
+	    protected void onPostExecute(Void result) {
+	    	super.onPostExecute(result);
+	    	
+	    	Log.d("MapScreen", "onPost:"+mProgress);
+			int count = 0;
+			while(count < utilInfo.size()) {
+					MarkerInfo mo = utilInfo.get(count);
+					
+					Bitmap image = null;
+					if(mo.rank.contains("gas")) {
+						image = BitmapFactory.decodeResource
+								(MapScreen.this.getResources(), R.drawable.barrel_32);
+					} else if(mo.rank.contains("money")){
+						image = BitmapFactory.decodeResource
+								(MapScreen.this.getResources(), R.drawable.coin_32);
+					} else if(mo.rank.contains("food")){
+						image = BitmapFactory.decodeResource
+								(getResources(), R.drawable.cocktail_32);
+					}
+					
+					marker = map.addMarker(new MarkerOptions()
+							.position(mo.infoCoord)
+							.title(mo.infoTitle)
+							.icon(BitmapDescriptorFactory.fromBitmap
+									(Bitmap.createScaledBitmap(image, 20, 20, false))));
+					utilMarkers.add(marker);
+					// TODO hashMapInfo.put(marker, mo);
 					count++;
 			}
 		}
